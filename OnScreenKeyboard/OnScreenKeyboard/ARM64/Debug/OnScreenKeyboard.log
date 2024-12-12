@@ -1,1 +1,11 @@
-﻿  OnScreenKeyboard.vcxproj -> \\Mac\Home\Documents\kursach5sem\OnScreenKeyboard\ARM64\Debug\OnScreenKeyboard.exe
+﻿  Keyboard.cpp
+\\mac\Home\Documents\kursach5sem\OnScreenKeyboard\KeyboardView.h(21,1): warning C4010: однострочный комментарий содержит знак объединения строк
+  (компиляция исходного файла "Keyboard.cpp")
+  
+\\mac\Home\Documents\kursach5sem\OnScreenKeyboard\Keyboard.cpp(204,106): warning C4311: приведение типов: усечение указателя из "HWND" в "unsigned int"
+\\mac\Home\Documents\kursach5sem\OnScreenKeyboard\Keyboard.cpp(204,106): warning C4302: приведение типов: усечение из "HWND" к "unsigned int"
+\\mac\Home\Documents\kursach5sem\OnScreenKeyboard\Keyboard.cpp(220,31): warning C4267: инициализация: преобразование из "size_t" в "int"; возможна потеря данных
+\\mac\Home\Documents\kursach5sem\OnScreenKeyboard\Keyboard.cpp(257,24): warning C4267: инициализация: преобразование из "size_t" в "int"; возможна потеря данных
+\\mac\Home\Documents\kursach5sem\OnScreenKeyboard\Keyboard.cpp(404,24): warning C4267: инициализация: преобразование из "size_t" в "int"; возможна потеря данных
+\\mac\Home\Documents\kursach5sem\OnScreenKeyboard\Keyboard.cpp(454,24): warning C4267: инициализация: преобразование из "size_t" в "int"; возможна потеря данных
+  OnScreenKeyboard.vcxproj -> \\Mac\Home\Documents\kursach5sem\OnScreenKeyboard\ARM64\Debug\OnScreenKeyboard.exe
