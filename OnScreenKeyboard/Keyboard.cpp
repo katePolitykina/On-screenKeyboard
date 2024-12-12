@@ -1,4 +1,4 @@
-
+п»ї
 #include <windows.h>
 #include <tchar.h>
 #include <strsafe.h>
@@ -6,10 +6,35 @@
 #include <vector>
 #include <iostream>
 #include <map>
+#include <unordered_map>
+#include "KeyboardView.h"
+
 
 #define WM_INPUTLANGCHANGE 0x0051
 //
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+const UINT macKeyboardLayout[] = {
+    // Р СЏРґ 1
+    VK_ESCAPE, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12,
+
+    // Р СЏРґ 2
+    VK_OEM_3, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', VK_OEM_MINUS, VK_OEM_PLUS, VK_BACK,
+
+    // Р СЏРґ 3
+    VK_TAB, 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', VK_OEM_4, VK_OEM_6, VK_OEM_5,
+
+    // Р СЏРґ 4
+    VK_CAPITAL, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', VK_OEM_1, VK_OEM_7, VK_RETURN,
+
+    // Р СЏРґ 5
+    VK_LSHIFT, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', VK_OEM_COMMA, VK_OEM_PERIOD, VK_OEM_2, VK_RSHIFT,
+
+    // Р СЏРґ 6
+    VK_LCONTROL, VK_LMENU, VK_LWIN, VK_SPACE, VK_RWIN, VK_RMENU, VK_LEFT, VK_UP, VK_DOWN, VK_RIGHT
+};
+
+KeyboardView keyboard;
+
 
 struct Key {
     RECT rect;
@@ -20,8 +45,52 @@ struct Key {
         : rect{ left, top, right, bottom }, isClicked(false) {}
 };
 
+std::string GetKeyDisplaySymbol(int keyCode) {
+    // РЎРѕР·РґР°РµРј РјР°РїРїРёРЅРі РІРёСЂС‚СѓР°Р»СЊРЅС‹С… РєРѕРґРѕРІ РєР»Р°РІРёС€ РЅР° РёС… РѕС‚РѕР±СЂР°Р¶Р°РµРјС‹Рµ СЃРёРјРІРѕР»С‹
+    std::unordered_map<int, std::string> keyMap = {
+        { 0x01, "ESC" },          // ESC
+        { 0x0F, "F1" },           // F1
+        { 0x10, "F2" },           // F2
+        { 0x11, "F3" },           // F3
+        { 0x12, "F4" },           // F4
+        { 0x13, "F5" },           // F5
+        { 0x14, "F6" },           // F6
+        { 0x15, "F7" },           // F7
+        { 0x16, "F8" },           // F8
+        { 0x17, "F9" },           // F9
+        { 0x18, "F10" },          // F10
+        { 0x19, "F11" },          // F11
+        { 0x1A, "F12" },          // F12
+        { 0x0F1, "Tab" },         // Tab
+        { 0x2A, "Delete" },       // Delete
+        { 0x3A, "Caps Lock" },    // Caps Lock
+        { 0x1C, "Return" },       // Return (Enter)
+        { 0xE0, "в—Ѓ" },            // Left Arrow
+        { 0xE1, "в–і" },            // Up Arrow
+        { 0xE2, "в–Ѕ" },            // Down Arrow
+        { 0xE3, "в–·" },            // Right Arrow
 
+        // Р›РµРІС‹Рµ Рё РїСЂР°РІС‹Рµ РєР»Р°РІРёС€Рё
+        { 0x5B, "Command (Left)" },  // Left Command (Windows)
+        { 0x5C, "Command (Right)" }, // Right Command (Windows)
+        { 0xA0, "Left Shift" },   // Р›РµРІС‹Р№ Shift
+        { 0xA1, "Right Shift" },  // РџСЂР°РІС‹Р№ Shift
+        { 0xA2, "Left Control" }, // Р›РµРІС‹Р№ Control
+        { 0xA3, "Right Control" },// РџСЂР°РІС‹Р№ Control
+        { 0xA4, "Left Option" },  // Р›РµРІС‹Р№ Option (Alt)
+        { 0xA5, "Right Option" }  // РџСЂР°РІС‹Р№ Option (Alt)
+    };
+
+    // РџС‹С‚Р°РµРјСЃСЏ РЅР°Р№С‚Рё СЃРёРјРІРѕР» РїРѕ РєРѕРґСѓ РєР»Р°РІРёС€Рё
+    if (keyMap.find(keyCode) != keyMap.end()) {
+        return keyMap[keyCode];
+    }
+    else {
+        return "Unknown Key";
+    }
+}
 std::vector<Key> keyPos;
+
 static HWND previousActiveWindow = NULL;
 static HWND hwnd;
 HHOOK keyboardHook;
@@ -30,32 +99,14 @@ bool isKeyPressed = false;
 std::map<UINT, bool> modifierState = {
     {VK_RSHIFT, false},
     {VK_LSHIFT, false},
-    {VK_CONTROL, false},
-    {VK_MENU, false},     // Alt
-    {VK_LWIN, false},     // Command (левая)
-    {VK_RWIN, false}      // Command (правая)G
-};
-const UINT macKeyboardLayout[] = {
-    // Ряд 1
-    VK_ESCAPE, VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12,
-
-    // Ряд 2
-    VK_OEM_3, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', VK_OEM_MINUS, VK_OEM_PLUS, VK_BACK,
-
-    // Ряд 3
-    VK_TAB, 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', VK_OEM_4, VK_OEM_6, VK_OEM_5,
-
-    // Ряд 4
-    VK_CAPITAL, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', VK_OEM_1, VK_OEM_7, VK_RETURN,
-
-    // Ряд 5
-    VK_LSHIFT, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', VK_OEM_COMMA, VK_OEM_PERIOD, VK_OEM_2, VK_RSHIFT,
-
-    // Ряд 6
-    VK_CONTROL, VK_LMENU, VK_LWIN, VK_SPACE, VK_RWIN, VK_RMENU, VK_LEFT, VK_UP, VK_DOWN, VK_RIGHT
+    {VK_LCONTROL, false},
+    {VK_LMENU, false},
+    {VK_RMENU, false},  // Alt
+    {VK_LWIN, false},     // Command (Р»РµРІР°СЏ)
+    {VK_RWIN, false}      // Command (РїСЂР°РІР°СЏ)
 };
 
-// Преобразование виртуального кода в символ
+// РџСЂРµРѕР±СЂР°Р·РѕРІР°РЅРёРµ РІРёСЂС‚СѓР°Р»СЊРЅРѕРіРѕ РєРѕРґР° РІ СЃРёРјРІРѕР»
 std::wstring GetCharFromVirtualKey(const UINT vkCode) {
     BYTE keyboardState[256] = { 0 };
     WCHAR buffer[5] = { 0 };
@@ -71,79 +122,79 @@ std::wstring GetCharFromVirtualKey(const UINT vkCode) {
         printf("Failed to get keyboard layouts.\n");
     }*/
 
-    //Получаем текущую раскладку клавиатурыф
+    //РџРѕР»СѓС‡Р°РµРј С‚РµРєСѓС‰СѓСЋ СЂР°СЃРєР»Р°РґРєСѓ РєР»Р°РІРёР°С‚СѓСЂС‹С„
     HKL keyboardLayout = GetKeyboardLayout(0);
     LANGID langId = LOWORD((DWORD_PTR)keyboardLayout);
 
-    // Получаем текущее состояние клавиш
+    // РџРѕР»СѓС‡Р°РµРј С‚РµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РєР»Р°РІРёС€
     if (!GetKeyboardState(keyboardState)) {
-        return L""; // Ошибка получения состояния клавиатуры
+        return L""; // РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ СЃРѕСЃС‚РѕСЏРЅРёСЏ РєР»Р°РІРёР°С‚СѓСЂС‹
     }
     bool isLeftShiftPressed = keyboardState[VK_LSHIFT] & 0x80;
     bool isRightShiftPressed = keyboardState[VK_RSHIFT] & 0x80;
     bool isLeftShiftPressed1 = (GetKeyState(VK_LSHIFT) & 0x8000) != 0;
-    // Устанавливаем состояние клавиш модификаторов
+    // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЃРѕСЃС‚РѕСЏРЅРёРµ РєР»Р°РІРёС€ РјРѕРґРёС„РёРєР°С‚РѕСЂРѕРІ
     if (GetKeyState(VK_SHIFT) & 0x8000) {
-        keyboardState[VK_SHIFT] = 0x80; // Задаём состояние нажатой клавиши Shift
+        keyboardState[VK_SHIFT] = 0x80; // Р—Р°РґР°С‘Рј СЃРѕСЃС‚РѕСЏРЅРёРµ РЅР°Р¶Р°С‚РѕР№ РєР»Р°РІРёС€Рё Shift
     }
     if (GetKeyState(VK_CONTROL) & 0x8000) {
-        keyboardState[VK_CONTROL] = 0x80; // Задаём состояние нажатой клавиши Ctrl
+        keyboardState[VK_CONTROL] = 0x80; // Р—Р°РґР°С‘Рј СЃРѕСЃС‚РѕСЏРЅРёРµ РЅР°Р¶Р°С‚РѕР№ РєР»Р°РІРёС€Рё Ctrl
     }
     if (GetKeyState(VK_MENU) & 0x8000) {
-        keyboardState[VK_MENU] = 0x80; // Задаём состояние нажатой клавиши Alt
+        keyboardState[VK_MENU] = 0x80; // Р—Р°РґР°С‘Рј СЃРѕСЃС‚РѕСЏРЅРёРµ РЅР°Р¶Р°С‚РѕР№ РєР»Р°РІРёС€Рё Alt
     }
     switch (langId) {
-    case 0x0409: // Английский (США)
+    case 0x0409: // РђРЅРіР»РёР№СЃРєРёР№ (РЎРЁРђ)
         printf("Current language: English (US)\n");
         break;
-    case 0x0419: // Русский
+    case 0x0419: // Р СѓСЃСЃРєРёР№
         printf("Current language: Russian\n");
         break;
     default:
         printf("Unknown language: 0x%x\n", langId);
     }
 
-    // Преобразуем виртуальный код в символ
+    // РџСЂРµРѕР±СЂР°Р·СѓРµРј РІРёСЂС‚СѓР°Р»СЊРЅС‹Р№ РєРѕРґ РІ СЃРёРјРІРѕР»
     int result = ToUnicodeEx(
-        vkCode,                          // Виртуальный код клавиши
-        MapVirtualKeyEx(vkCode, 0, keyboardLayout), // Скан-код
-        keyboardState,                   // Состояние клавиш
-        buffer,                          // Буфер для символа
-        4,                               // Размер буфера
-        0,                               // Флаги (не используются)
-        keyboardLayout                   // Раскладка клавиатуры
+        vkCode,                          // Р’РёСЂС‚СѓР°Р»СЊРЅС‹Р№ РєРѕРґ РєР»Р°РІРёС€Рё
+        MapVirtualKeyEx(vkCode, 0, keyboardLayout), // РЎРєР°РЅ-РєРѕРґ
+        keyboardState,                   // РЎРѕСЃС‚РѕСЏРЅРёРµ РєР»Р°РІРёС€
+        buffer,                          // Р‘СѓС„РµСЂ РґР»СЏ СЃРёРјРІРѕР»Р°
+        4,                               // Р Р°Р·РјРµСЂ Р±СѓС„РµСЂР°
+        0,                               // Р¤Р»Р°РіРё (РЅРµ РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ)
+        keyboardLayout                   // Р Р°СЃРєР»Р°РґРєР° РєР»Р°РІРёР°С‚СѓСЂС‹
     );
 
     if (result > 0) {
-        return std::wstring(1, buffer[0]); // Возвращаем первый символ как строку
+        return std::wstring(1, buffer[0]); // Р’РѕР·РІСЂР°С‰Р°РµРј РїРµСЂРІС‹Р№ СЃРёРјРІРѕР» РєР°Рє СЃС‚СЂРѕРєСѓ
     }
 
-    return L""; // Если символа нет
+    return L""; // Р•СЃР»Рё СЃРёРјРІРѕР»Р° РЅРµС‚
 }
 
 void DrawKey(HDC hdc, const Key& rect, const UINT key) {
-    // Создаём кисть для фона клавиши
+    // РЎРѕР·РґР°С‘Рј РєРёСЃС‚СЊ РґР»СЏ С„РѕРЅР° РєР»Р°РІРёС€Рё
     HBRUSH brush = CreateSolidBrush(rect.isClicked ? RGB(192, 192, 192) : RGB(255, 255, 255));
     FillRect(hdc, &rect.rect, brush);
     DeleteObject(brush);
 
-    // Рисуем рамку клавиши
+    // Р РёСЃСѓРµРј СЂР°РјРєСѓ РєР»Р°РІРёС€Рё
     FrameRect(hdc, &rect.rect, (HBRUSH)GetStockObject(BLACK_BRUSH));
 
-    // Центрируем текст
+    // Р¦РµРЅС‚СЂРёСЂСѓРµРј С‚РµРєСЃС‚
     int width = rect.rect.right - rect.rect.left;
     int height = rect.rect.bottom - rect.rect.top;
 
-    SetBkMode(hdc, TRANSPARENT); // Прозрачный фон текста
-    SetTextColor(hdc, rect.isClicked ? RGB(255, 255, 255) : RGB(0, 0, 0)); // Устанавливаем цвет текста
+    SetBkMode(hdc, TRANSPARENT); // РџСЂРѕР·СЂР°С‡РЅС‹Р№ С„РѕРЅ С‚РµРєСЃС‚Р°
+    SetTextColor(hdc, rect.isClicked ? RGB(255, 255, 255) : RGB(0, 0, 0)); // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј С†РІРµС‚ С‚РµРєСЃС‚Р°
 
-    // Получаем символ клавиши
+    // РџРѕР»СѓС‡Р°РµРј СЃРёРјРІРѕР» РєР»Р°РІРёС€Рё
     std::wstring keyText = GetCharFromVirtualKey(key);
 
-    // Создаём копию RECT для корректного отображения текста
+    // РЎРѕР·РґР°С‘Рј РєРѕРїРёСЋ RECT РґР»СЏ РєРѕСЂСЂРµРєС‚РЅРѕРіРѕ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ С‚РµРєСЃС‚Р°
     RECT textRect = rect.rect;
 
-    // Рисуем текст
+    // Р РёСЃСѓРµРј С‚РµРєСЃС‚
     DrawText(hdc, keyText.c_str(), -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
@@ -156,32 +207,75 @@ void DrawKeyboard(HDC hdc) {
 
 void DebugActiveWindow()
 {
-    HWND hForegroundWindow = GetForegroundWindow(); // Получаем активное окноa
+    HWND hForegroundWindow = GetForegroundWindow(); // РџРѕР»СѓС‡Р°РµРј Р°РєС‚РёРІРЅРѕРµ РѕРєРЅРѕa
 
     if (hForegroundWindow != NULL)
     {
         wchar_t windowTitle[256];
-        GetWindowText(hForegroundWindow, windowTitle, sizeof(windowTitle) / sizeof(wchar_t)); // Получаем заголовок окна
+        GetWindowText(hForegroundWindow, windowTitle, sizeof(windowTitle) / sizeof(wchar_t)); // РџРѕР»СѓС‡Р°РµРј Р·Р°РіРѕР»РѕРІРѕРє РѕРєРЅР°
 
         wchar_t debugMessage[512];
-        StringCchPrintf(debugMessage, 512, L"Активное окно: %s (HWND: 0x%X)\n", windowTitle, (unsigned int)hForegroundWindow);
+        StringCchPrintf(debugMessage, 512, L"РђРєС‚РёРІРЅРѕРµ РѕРєРЅРѕ: %s (HWND: 0x%X)\n", windowTitle, (unsigned int)hForegroundWindow);
 
-        OutputDebugString(debugMessage); // Выводим сообщение в отладчик
+        OutputDebugString(debugMessage); // Р’С‹РІРѕРґРёРј СЃРѕРѕР±С‰РµРЅРёРµ РІ РѕС‚Р»Р°РґС‡РёРє
     }
     else
     {
-        OutputDebugString(L"Активное окно не найдено.\n");
+        OutputDebugString(L"РђРєС‚РёРІРЅРѕРµ РѕРєРЅРѕ РЅРµ РЅР°Р№РґРµРЅРѕ.\n");
     }
 }
 
+
+
+
+
+
 void GenerateKeys(int width, int height) {
     keyPos.clear();
-    int rowHeight = height / 11; // 5 рядов обычных и 1 в два раза меньше
+    keyboard.CalculateRowHeight(height);
+    int rowTop = 0;
+    int rowBottom = 0;
+    for (int i = 0; i < keyboard.numbOfRows; i++) {
+        int numberOfKewsInRow = keyboard.keySizes[i].size();
 
-    int remainingWidth;        // Для лишних пикселей на ряду
-    int keyWidth;              // Базовая ширина клавиши
+        rowTop = rowBottom;
+        if (i == 0) {
+            rowBottom += keyboard.padding;
+        }
+        rowBottom += keyboard.rowHeight * keyboard.keyHeight[i][0];
+        int standartKeyWidth = width / keyboard.normalKeyWidth[i];
+        int right = 0;
+        int left = 0;
+        int numberOfBigKeys = 0;
+        for (bool value : keyboard.keySizes[i]) {
+            if (!value) { // Р•СЃР»Рё Р·РЅР°С‡РµРЅРёРµ СЂР°РІРЅРѕ 0 (false)
+                numberOfBigKeys++;
+            }
+        }
+        int additionalWidth = 0;
+        if (numberOfBigKeys > 0) {
+            additionalWidth = (width - standartKeyWidth * numberOfKewsInRow) / numberOfBigKeys;
+        }
+        for (int j = 0; j < numberOfKewsInRow; j++) {
+            left = right;
+            right += standartKeyWidth;
+            if (!keyboard.keySizes[i][j]) {
+                right += additionalWidth;
+            }
+            RECT escRect = { left, rowTop, right, rowBottom };
+            keyPos.push_back(escRect);
+        }
+    }
 
-    // --- 1. Верхний ряд ---
+}
+void newGenerateKeys(int width, int height) {
+    keyPos.clear();
+    int rowHeight = height / 11; // 5 СЂСЏРґРѕРІ РѕР±С‹С‡РЅС‹С… Рё 1 РІ РґРІР° СЂР°Р·Р° РјРµРЅСЊС€Рµ
+
+    int remainingWidth;        // Р”Р»СЏ Р»РёС€РЅРёС… РїРёРєСЃРµР»РµР№ РЅР° СЂСЏРґСѓ
+    int keyWidth;              // Р‘Р°Р·РѕРІР°СЏ С€РёСЂРёРЅР° РєР»Р°РІРёС€Рё
+
+    // --- 1. Р’РµСЂС…РЅРёР№ СЂСЏРґ ---
     int rowTop = 0;
     int rowBottom = height % 11 + rowHeight;
     rowHeight *= 2;
@@ -198,7 +292,7 @@ void GenerateKeys(int width, int height) {
     }
 
 
-    // --- 2. Второй ряд ---
+    // --- 2. Р’С‚РѕСЂРѕР№ СЂСЏРґ ---
     keyWidth = width / 14;
     rowTop = rowBottom;
     rowBottom += rowHeight;
@@ -214,7 +308,7 @@ void GenerateKeys(int width, int height) {
     keyPos.push_back(deleteRect);
 
 
-    // --- 3. Третий ряд ---
+    // --- 3. РўСЂРµС‚РёР№ СЂСЏРґ ---
     rowTop = rowBottom;
     rowBottom += rowHeight;
 
@@ -229,7 +323,7 @@ void GenerateKeys(int width, int height) {
         keyPos.push_back(keyRect);
     }
 
-    // --- 4. Четвертый ряд ---
+    // --- 4. Р§РµС‚РІРµСЂС‚С‹Р№ СЂСЏРґ ---
     rowTop = rowBottom;
     rowBottom += rowHeight;
 
@@ -248,7 +342,7 @@ void GenerateKeys(int width, int height) {
                        width, rowBottom };
     keyPos.push_back(returnRect);
 
-    // --- 5. Пятый ряд ---
+    // --- 5. РџСЏС‚С‹Р№ СЂСЏРґ ---
     rowTop = rowBottom;
     rowBottom += rowHeight;
 
@@ -267,7 +361,7 @@ void GenerateKeys(int width, int height) {
                            width, rowBottom };
     keyPos.push_back(rightShiftRect);
 
-    // --- 6. Шестой ряд --- 
+    // --- 6. РЁРµСЃС‚РѕР№ СЂСЏРґ --- 
     rowTop = rowBottom;
     rowBottom += rowHeight;
     remainingWidth = width - keyWidth * 8;
@@ -286,7 +380,7 @@ void GenerateKeys(int width, int height) {
         keyPos.push_back(keyRect);
     }
 
-    // Cтрелочкиф
+    // CС‚СЂРµР»РѕС‡РєРёС„
     RECT LeftRect = { spaceRect.right + keyWidth * 2, rowTop + rowHeight / 2, spaceRect.right + keyWidth * 3, rowBottom };
     keyPos.push_back(LeftRect);
 
@@ -296,7 +390,7 @@ void GenerateKeys(int width, int height) {
 
 
 }
-// Обработчик событий клавиатуры
+// РћР±СЂР°Р±РѕС‚С‡РёРє СЃРѕР±С‹С‚РёР№ РєР»Р°РІРёР°С‚СѓСЂС‹
 LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         KBDLLHOOKSTRUCT* kbdStruct = (KBDLLHOOKSTRUCT*)lParam;
@@ -316,12 +410,12 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             }
 
             wchar_t debugMessage[512];
-            StringCchPrintf(debugMessage, 512, L"Нажата клавиша: %x\n", (unsigned int)kbdStruct->vkCode);
+            StringCchPrintf(debugMessage, 512, L"РќР°Р¶Р°С‚Р° РєР»Р°РІРёС€Р°: %x\n", (unsigned int)kbdStruct->vkCode);
             OutputDebugString(debugMessage);
 
         }
         else if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
-            // Обработка отпускания клавиши
+            // РћР±СЂР°Р±РѕС‚РєР° РѕС‚РїСѓСЃРєР°РЅРёСЏ РєР»Р°РІРёС€Рё
             int arraySize = sizeof(macKeyboardLayout) / sizeof(macKeyboardLayout[0]);
             for (int i = 0; i < arraySize; ++i) {
                 if (macKeyboardLayout[i] == kbdStruct->vkCode) {
@@ -340,10 +434,10 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 //    if (nCode == HC_ACTION) {
 //        MSG* msg = (MSG*)lParam;
 //
-//        // Отслеживаем сообщения смены языка
+//        // РћС‚СЃР»РµР¶РёРІР°РµРј СЃРѕРѕР±С‰РµРЅРёСЏ СЃРјРµРЅС‹ СЏР·С‹РєР°
 //        if (msg->message == WM_INPUTLANGCHANGEREQUEST || msg->message == WM_INPUTLANGCHANGE) {
-//            std::cout << "Смена языка произошла!" << std::endl;
-//            // Здесь можно добавить дополнительные действия, например, обработку смены языка
+//            std::cout << "РЎРјРµРЅР° СЏР·С‹РєР° РїСЂРѕРёР·РѕС€Р»Р°!" << std::endl;
+//            // Р—РґРµСЃСЊ РјРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ РґРµР№СЃС‚РІРёСЏ, РЅР°РїСЂРёРјРµСЂ, РѕР±СЂР°Р±РѕС‚РєСѓ СЃРјРµРЅС‹ СЏР·С‹РєР°
 //        }
 //    }
 //    return CallNextHookEx(languageHook, nCode, wParam, lParam);
@@ -385,7 +479,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, NULL, 0);
     // languageHook = SetWindowsHookEx(WH_CALLWNDPROC, MsgProc, NULL, GetCurrentThreadId());
     /* if (languageHook == NULL) {
-         std::cerr << "Не удалось установить хук!" << std::endl;
+         std::cerr << "РќРµ СѓРґР°Р»РѕСЃСЊ СѓСЃС‚Р°РЅРѕРІРёС‚СЊ С…СѓРє!" << std::endl;
          return 1;
      }*/
 
@@ -417,7 +511,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         OutputDebugString(L"WM_ACTIVATE\n");
         DebugActiveWindow();
         if (LOWORD(wParam) == WA_INACTIVE) {
-            OutputDebugString(L"Окно keyboard деактивировано.\n");
+            OutputDebugString(L"РћРєРЅРѕ keyboard РґРµР°РєС‚РёРІРёСЂРѕРІР°РЅРѕ.\n");
             DebugActiveWindow();
         }
         break;
@@ -425,17 +519,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         int width = LOWORD(lParam);
         int height = HIWORD(lParam);
         GenerateKeys(width, height);
-        InvalidateRect(hwnd, nullptr, TRUE); // Перерисовать окно
+        InvalidateRect(hwnd, nullptr, TRUE); // РџРµСЂРµСЂРёСЃРѕРІР°С‚СЊ РѕРєРЅРѕ
     } break;
     case WM_KILLFOCUS: {
         OutputDebugString(L"WM_KILLFOCUS\n");
-        OutputDebugString(L"Окно keyboard потеряло фокус.\n");
+        OutputDebugString(L"РћРєРЅРѕ keyboard РїРѕС‚РµСЂСЏР»Рѕ С„РѕРєСѓСЃ.\n");
         DebugActiveWindow();
     }
                      break;
     case WM_SETFOCUS: {
         OutputDebugString(L"WM_SETFOCUS\n");
-        OutputDebugString(L"Окно keyboard получило фокус.\n");
+        OutputDebugString(L"РћРєРЅРѕ keyboard РїРѕР»СѓС‡РёР»Рѕ С„РѕРєСѓСЃ.\n");
         DebugActiveWindow();
     }
                     break;
@@ -446,105 +540,52 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_LBUTTONDOWN: {
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
-        // Проверяем, попал ли клик в один из прямоугольников
+        // РџСЂРѕРІРµСЂСЏРµРј, РїРѕРїР°Р» Р»Рё РєР»РёРє РІ РѕРґРёРЅ РёР· РїСЂСЏРјРѕСѓРіРѕР»СЊРЅРёРєРѕРІ
         int keyPosSize = keyPos.size();
         for (int i = 0; i < keyPosSize; ++i) {
             if (PtInRect(&keyPos[i].rect, { x, y })) {
                 UINT vkCode = macKeyboardLayout[i];
                 if (modifierState.find(vkCode) != modifierState.end()) {
-                    // Переключаем состояние модификаторной клавиши
+                    // РџРµСЂРµРєР»СЋС‡Р°РµРј СЃРѕСЃС‚РѕСЏРЅРёРµ РјРѕРґРёС„РёРєР°С‚РѕСЂРЅРѕР№ РєР»Р°РІРёС€Рё
                     modifierState[vkCode] = !modifierState[vkCode];
-                    // Готовим INPUT структуру
+                    // Р“РѕС‚РѕРІРёРј INPUT СЃС‚СЂСѓРєС‚СѓСЂСѓ
                     INPUT input = { 0 };
                     input.type = INPUT_KEYBOARD;
                     input.ki.wVk = vkCode;
                     if (!modifierState[vkCode]) {
-                        // Если клавиша отпущена, добавляем флаг KEYEVENTF_KEYUP
+                        // Р•СЃР»Рё РєР»Р°РІРёС€Р° РѕС‚РїСѓС‰РµРЅР°, РґРѕР±Р°РІР»СЏРµРј С„Р»Р°Рі KEYEVENTF_KEYUP
                         input.ki.dwFlags = KEYEVENTF_KEYUP;
                     }
                     SendInput(1, &input, sizeof(INPUT));
                 }
                 else {
-                    // Обычная клавиша, отправляем нажатие
+                    // РћР±С‹С‡РЅР°СЏ РєР»Р°РІРёС€Р°, РѕС‚РїСЂР°РІР»СЏРµРј РЅР°Р¶Р°С‚РёРµ
                     INPUT input = { 0 };
                     input.type = INPUT_KEYBOARD;
                     input.ki.wVk = vkCode;
-                    // Симулируем нажатие
+                    // РЎРёРјСѓР»РёСЂСѓРµРј РЅР°Р¶Р°С‚РёРµ
                     SendInput(1, &input, sizeof(INPUT));
                 }
-                //INPUT input = { 0 };
-                //// Set up the INPUT structure
-                //input.type = INPUT_KEYBOARD;
-                //input.ki.wVk = macKeyboardLayout[i]; // Virtual-Key Code for 'A'
-                //// Simulate the key press юющзюжэъ
-                //SendInput(1, &input, sizeof(INPUT));
                 break;
             }
         }
-        /*
-        previousActiveWindow = GetForegroundWindow();
-        OutputDebugString(L"WM_LBUTTONDOWN\n");
-        DebugActiveWindow();
-        wchar_t debugMessage[512];
-        StringCchPrintf(debugMessage, 512, L"Активное окно:(HWND: 0x%X)\n", (unsigned int)previousActiveWindow);
-        OutputDebugString(debugMessage);
-        StringCchPrintf(debugMessage, 512, L"Окно с getfocus:(HWND: 0x%X)\n", (unsigned int)GetFocus());
-        OutputDebugString(debugMessage);
-        if (previousActiveWindow != hwnd && previousActiveWindow != NULL) {
-            // Активируем предыдущее окно
-            SetForegroundWindow(previousActiveWindow);
-            // Отправляем в это окно сообщение о нажатии клавиши 'A'A
-           // SendMessage(previousActiveWindow, WM_CHAR, 'A', 0);
-            INPUT input = { 0 };
-            // Set up the INPUT structure
-            input.type = INPUT_KEYBOARD;
-            input.ki.wVk = 0x41; // Virtual-Key Code for 'A'
-            // Simulate the key press
-            SendInput(1, &input, sizeof(INPUT));
-            //// Simulate the key release
-            //input.ki.dwFlags = KEYEVENTF_KEYUP;
-            //SendInput(1, &input, sizeof(INPUT));
-        }
-        */
     } break;
-
-
-        //case WM_LBUTTONUP: {
-        //    int x = LOWORD(lParam);
-        //    int y = HIWORD(lParam);
-        //    int keyPosSize = keyPos.size();
-        //    for (int i = 0; i < keyPosSize; ++i) {
-        //        if (PtInRect(&keyPos[i].rect, { x, y })) {
-        //            INPUT input = { 0 };
-        //            // Set up the INPUT structure    
-        //            input.type = INPUT_KEYBOARD;
-        //            input.ki.wVk = macKeyboardLayout[i]; // Virtual-Key Code for 'A'
-        //            input.ki.dwFlags = KEYEVENTF_KEYUP;
-        //            // Simulate the key press
-        //            SendInput(1, &input, sizeof(INPUT));
-        //            break;
-        //        }
-        //    }
-        //}
-        //break;
-
-
     case WM_LBUTTONUP: {
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
-        // Проверяем, попал ли клик в один из прямоугольников
+        // РџСЂРѕРІРµСЂСЏРµРј, РїРѕРїР°Р» Р»Рё РєР»РёРє РІ РѕРґРёРЅ РёР· РїСЂСЏРјРѕСѓРіРѕР»СЊРЅРёРєРѕРІ
         int keyPosSize = keyPos.size();
         for (int i = 0; i < keyPosSize; ++i) {
             if (PtInRect(&keyPos[i].rect, { x, y })) {
                 UINT vkCode = macKeyboardLayout[i];
-                // Проверяем, не является ли клавиша модификаторной
+                // РџСЂРѕРІРµСЂСЏРµРј, РЅРµ СЏРІР»СЏРµС‚СЃСЏ Р»Рё РєР»Р°РІРёС€Р° РјРѕРґРёС„РёРєР°С‚РѕСЂРЅРѕР№
                 if (modifierState.find(vkCode) == modifierState.end()) {
-                    // Для обычных клавиш отправляем отпускание
+                    // Р”Р»СЏ РѕР±С‹С‡РЅС‹С… РєР»Р°РІРёС€ РѕС‚РїСЂР°РІР»СЏРµРј РѕС‚РїСѓСЃРєР°РЅРёРµ
                     INPUT input = { 0 };
                     input.type = INPUT_KEYBOARD;
                     input.ki.wVk = vkCode;
                     input.ki.dwFlags = KEYEVENTF_KEYUP;
-                    // Симулируем отпускание
+                    // РЎРёРјСѓР»РёСЂСѓРµРј РѕС‚РїСѓСЃРєР°РЅРёРµ
                     SendInput(1, &input, sizeof(INPUT));
                 }
                 break;
@@ -556,48 +597,48 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         break;
 
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hwnd, &ps);
-        // Очистка окна: закрашиваем фон
-        RECT rect;
-        GetClientRect(hwnd, &rect);
-        //  HBRUSH hBrush = CreateSolidBrush(isKeyPressed ? RGB(200, 200, 200) : RGB(255, 255, 255)); // Серый или белый
-        HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Белый фонa
-        FillRect(hdc, &rect, hBrush);
-        DeleteObject(hBrush);
-        // Отрисовка клавиатуры
-        DrawKeyboard(hdc);
-        EndPaint(hwnd, &ps);
-        return 0;
-    } break;
-
-
         //case WM_PAINT: {
         //    PAINTSTRUCT ps;
         //    HDC hdc = BeginPaint(hwnd, &ps);
-        //    // Получаем размеры окна
+        //    // РћС‡РёСЃС‚РєР° РѕРєРЅР°: Р·Р°РєСЂР°С€РёРІР°РµРј С„РѕРЅ
         //    RECT rect;
         //    GetClientRect(hwnd, &rect);
-        //    // Создаем совместимый контекст устройства памяти
-        //    HDC hdcMem = CreateCompatibleDC(hdc);
-        //    HBITMAP hBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
-        //    HGDIOBJ hOldBitmap = SelectObject(hdcMem, hBitmap);
-        //    // Заливаем фон в буфере памяти
-        //    HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Белый фон
-        //    FillRect(hdcMem, &rect, hBrush);
+        //  //  HBRUSH hBrush = CreateSolidBrush(isKeyPressed ? RGB(200, 200, 200) : RGB(255, 255, 255)); // РЎРµСЂС‹Р№ РёР»Рё Р±РµР»С‹Р№
+        //    HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Р‘РµР»С‹Р№ С„РѕРЅa
+        //    FillRect(hdc, &rect, hBrush);
         //    DeleteObject(hBrush);
-        //    // Отрисовка клавиатуры в буфере памяти
-        //    DrawKeyboard(hdcMem);
-        //    // Копируем содержимое из памяти на экран
-        //    BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
-        //    // Освобождаем ресурсы
-        //    SelectObject(hdcMem, hOldBitmap);
-        //    DeleteObject(hBitmap);
-        //    DeleteDC(hdcMem);
+        //    // РћС‚СЂРёСЃРѕРІРєР° РєР»Р°РІРёР°С‚СѓСЂС‹
+        //    DrawKeyboard(hdc);
         //    EndPaint(hwnd, &ps);
-        //    return 0;
+        //    return 0; 
         //} break;
+
+
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        // РџРѕР»СѓС‡Р°РµРј СЂР°Р·РјРµСЂС‹ РѕРєРЅР°
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        // РЎРѕР·РґР°РµРј СЃРѕРІРјРµСЃС‚РёРјС‹Р№ РєРѕРЅС‚РµРєСЃС‚ СѓСЃС‚СЂРѕР№СЃС‚РІР° РїР°РјСЏС‚Рё
+        HDC hdcMem = CreateCompatibleDC(hdc);
+        HBITMAP hBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+        HGDIOBJ hOldBitmap = SelectObject(hdcMem, hBitmap);
+        // Р—Р°Р»РёРІР°РµРј С„РѕРЅ РІ Р±СѓС„РµСЂРµ РїР°РјСЏС‚Рё
+        HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Р‘РµР»С‹Р№ С„РѕРЅ
+        FillRect(hdcMem, &rect, hBrush);
+        DeleteObject(hBrush);
+        // РћС‚СЂРёСЃРѕРІРєР° РєР»Р°РІРёР°С‚СѓСЂС‹ РІ Р±СѓС„РµСЂРµ РїР°РјСЏС‚Рё
+        DrawKeyboard(hdcMem);
+        // РљРѕРїРёСЂСѓРµРј СЃРѕРґРµСЂР¶РёРјРѕРµ РёР· РїР°РјСЏС‚Рё РЅР° СЌРєСЂР°РЅ
+        BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
+        // РћСЃРІРѕР±РѕР¶РґР°РµРј СЂРµСЃСѓСЂСЃС‹
+        SelectObject(hdcMem, hOldBitmap);
+        DeleteObject(hBitmap);
+        DeleteDC(hdcMem);
+        EndPaint(hwnd, &ps);
+        return 0;
+    } break;
     }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }

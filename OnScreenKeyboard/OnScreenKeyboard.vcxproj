@@ -183,6 +183,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Keyboard.cpp" />
+    <ClCompile Include="KeyboardView.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="KeyboardView.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
