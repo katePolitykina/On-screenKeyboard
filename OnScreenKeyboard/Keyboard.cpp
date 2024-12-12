@@ -32,9 +32,9 @@ const UINT macKeyboardLayout[] = {
     // Ряд 6
     VK_LCONTROL, VK_LMENU, VK_LWIN, VK_SPACE, VK_RWIN, VK_RMENU, VK_LEFT, VK_UP, VK_DOWN, VK_RIGHT
 };
-
+                           
 KeyboardView keyboard;
-
+ 
 
 struct Key {
     RECT rect;
@@ -105,64 +105,21 @@ std::map<UINT, bool> modifierState = {
     {VK_LWIN, false},     // Command (левая)
     {VK_RWIN, false}      // Command (правая)
 };
-
-// Преобразование виртуального кода в символ
-std::wstring GetCharFromVirtualKey(const UINT vkCode) {
-    std::wstring res = GetKeyDisplaySymbol(vkCode);
-    if (res.length() != 0)
-        return res;
-    BYTE keyboardState[256] = { 0 };
-    WCHAR buffer[5] = { 0 };
-
-    HKL keyboardLayout = GetKeyboardLayout(0);
-    LANGID langId = LOWORD((DWORD_PTR)keyboardLayout);
-
-    // Получаем текущее состояние клавиш
-    if (!GetKeyboardState(keyboardState)) {
-        return L""; // Ошибка получения состояния клавиатуры
+DWORD WINAPI CheckKeyboardLayout(LPVOID lpParam) {
+    if (lpParam == nullptr) {
+        return 1; // Ошибка: нет данных
     }
-    bool isLeftShiftPressed = keyboardState[VK_LSHIFT] & 0x80;
-    bool isRightShiftPressed = keyboardState[VK_RSHIFT] & 0x80;
-    bool isLeftShiftPressed1 = (GetKeyState(VK_LSHIFT) & 0x8000) != 0;
-    // Устанавливаем состояние клавиш модификаторов
-    if (GetKeyState(VK_SHIFT) & 0x8000) {
-        keyboardState[VK_SHIFT] = 0x80; // Задаём состояние нажатой клавиши Shift
-    }
-    if (GetKeyState(VK_LCONTROL) & 0x8000) {
-        keyboardState[VK_CONTROL] = 0;
-        keyboardState[VK_LCONTROL] = 0; // Задаём состояние нажатой клавиши Ctrl
-    }
+    // Преобразуем указатель в HKL*
+    HKL* pKeyboardLayout = static_cast<HKL*>(lpParam);
 
-    switch (langId) {
-    case 0x0409: // Английский (США)
-        printf("Current language: English (US)\n");
-        break;
-    case 0x0419: // Русский
-        printf("Current language: Russian\n");
-        break;
-    default:
-        printf("Unknown language: 0x%x\n", langId);
-    }
+    // Получаем текущую раскладку
+    *pKeyboardLayout = GetKeyboardLayout(0);  // Обновляем значение переменной через указатель
 
-    // Преобразуем виртуальный код в символ
-    int result = ToUnicodeEx(
-        vkCode,                          // Виртуальный код клавиши
-        MapVirtualKeyEx(vkCode, 0, keyboardLayout), // Скан-код
-        keyboardState,                   // Состояние клавиш
-        buffer,                          // Буфер для символа
-        4,                               // Размер буфера
-        0,                               // Флаги (не используются)
-        keyboardLayout                   // Раскладка клавиатуры
-    );
-
-    if (result > 0) {
-        return std::wstring(1, buffer[0]); // Возвращаем первый символ как строку
-    }
-
-    return L""; // Если символа нет
+    // Завершаем поток
+    return 0;
 }
 
-void DrawKey(HDC hdc, const Key& rect, const UINT key) {
+void DrawKey(HDC hdc, const Key& rect, const UINT key, const BYTE* keyboardState, HKL keyboardLayout) {
     // Создаём кисть для фона клавиши
     HBRUSH brush = CreateSolidBrush(rect.isClicked ? RGB(192, 192, 192) : RGB(255, 255, 255));
     FillRect(hdc, &rect.rect, brush);
@@ -175,19 +132,124 @@ void DrawKey(HDC hdc, const Key& rect, const UINT key) {
     SetTextColor(hdc, rect.isClicked ? RGB(255, 255, 255) : RGB(0, 0, 0)); // Устанавливаем цвет текста
 
     // Получаем символ клавиши
-    std::wstring keyText = GetCharFromVirtualKey(key);
 
-    // Создаём копию RECT для корректного отображения текста
+    std::wstring keyText = GetKeyDisplaySymbol(key);
+    if (keyText.length() == 0) {
+
+        WCHAR buffer[5] = { 0 };
+        // Преобразуем виртуальный код в символ         
+        int result = ToUnicodeEx(
+            key,                          // Виртуальный код клавиши
+            MapVirtualKeyEx(key, 0, keyboardLayout), // Скан-код
+            keyboardState,                   // Состояние клавиш
+            buffer,                          // Буфер для символа
+            4,                               // Размер буфера
+            0,                               // Флаги (не используются)
+            keyboardLayout                   // Раскладка клавиатуры
+        );
+
+        if (result > 0) {
+
+            keyText= std::wstring(1, buffer[0]); // Возвращаем первый символ как строку
+        }
+        else
+        {
+            keyText = L"";
+        }
+        
+    }
+    
     RECT textRect = rect.rect;
 
+
+    // Определяем подходящий размер шрифта
+    HFONT hFont = NULL; 
+    int fontSize = (rect.rect.top - rect.rect.bottom)/2; // Начальный размер шрифта
+    while (true) {
+        // Создаем шрифт с текущим размером
+        if (hFont) {
+            DeleteObject(hFont);
+        }
+        hFont = CreateFont(
+            -fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Arial"
+        );
+        SelectObject(hdc, hFont);
+
+        RECT calcRect = { 0, 0, textRect.right - textRect.left, textRect.bottom - textRect.top };
+        DrawText(hdc, keyText.c_str(), -1, &calcRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_CALCRECT | DT_NOPREFIX);
+
+        int textWidth = calcRect.right - calcRect.left;
+        int textHeight = calcRect.bottom - calcRect.top;
+
+        if (textWidth <= (textRect.right - textRect.left) && textHeight <= (textRect.bottom - textRect.top)) {
+            break; // Размер подходит
+        }
+
+        fontSize--; // Уменьшаем размер шрифта
+        if (fontSize < 5) {
+            break; // Минимальный размер шрифта достигнут
+        }
+    }
+
     // Рисуем текст
-    DrawText(hdc, keyText.c_str(), -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawText(hdc, keyText.c_str(), -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    if (hFont) {
+        DeleteObject(hFont);
+    }
 }
 
-
 void DrawKeyboard(HDC hdc) {
-    for (int i = 0; i < keyPos.size(); i++) {
-        DrawKey(hdc, keyPos[i], macKeyboardLayout[i]);
+    BYTE keyboardState[256] = { 0 };
+
+    // Получение текущего состояния клавиш
+    if (!GetKeyboardState(keyboardState)) {
+        std::cerr << "Ошибка получения состояния клавиш!" << std::endl;
+        return;
+    }
+
+    // Получение раскладки клавиатуры через поток
+    HKL keyboardLayout = NULL;
+    HANDLE hThread = CreateThread(
+        nullptr,
+        0,
+        CheckKeyboardLayout,
+        &keyboardLayout,
+        0,
+        nullptr
+    );
+
+    if (hThread == nullptr) {
+        std::cerr << "Ошибка при создании потока!" << std::endl;
+        return;
+    }
+
+    WaitForSingleObject(hThread, INFINITE);
+    CloseHandle(hThread);
+
+    if (keyboardLayout == NULL) {
+        std::cerr << "Ошибка получения раскладки клавиатуры!" << std::endl;
+        return;
+    }
+    // Обновление состояния клавиш модификаторов
+
+    if (GetKeyState(VK_SHIFT) & 0x8000) {
+        keyboardState[VK_SHIFT] = 0x80; // Shift нажат
+    }
+    else {
+        keyboardState[VK_SHIFT] = 0x00; // Shift отпущен
+    }
+           
+    keyboardState[VK_CONTROL] = 0x00;
+    keyboardState[VK_LCONTROL] = 0x00;
+    keyboardState[VK_RCONTROL] = 0x00;
+    // Цикл отрисовки всех клавиш
+    for (size_t i = 0; i < keyPos.size(); ++i) {
+    
+        // Рисование клавиши
+        DrawKey(hdc, keyPos[i], macKeyboardLayout[i], keyboardState, keyboardLayout);
     }
 }
 
@@ -259,7 +321,6 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
         }
         if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
-
             int arraySize = sizeof(macKeyboardLayout) / sizeof(macKeyboardLayout[0]);
             for (int i = 0; i < arraySize; ++i) {
                 if (macKeyboardLayout[i] == kbdStruct->vkCode) {
@@ -290,19 +351,8 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     }
     return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
 }
-//LRESULT CALLBACK MsgProc(int nCode, WPARAM wParam, LPARAM lParam) {
-//    if (nCode == HC_ACTION) {
-//        MSG* msg = (MSG*)lParam;
-//
-//        // Отслеживаем сообщения смены языка
-//        if (msg->message == WM_INPUTLANGCHANGEREQUEST || msg->message == WM_INPUTLANGCHANGE) {
-//            std::cout << "Смена языка произошла!" << std::endl;
-//            // Здесь можно добавить дополнительные действия, например, обработку смены языка
-//        }
-//    }
-//    return CallNextHookEx(languageHook, nCode, wParam, lParam);
-//}
 
+  
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
@@ -322,7 +372,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         | WS_EX_NOACTIVATE,                  // Optional window styles.
         CLASS_NAME,                     // Window class
         L"On-screen keyboard",          // Window text
-        WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME,
 
         // Size and position
         CW_USEDEFAULT, CW_USEDEFAULT, 500, 200,
@@ -337,11 +387,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     }
 
     keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, NULL, 0);
-    // languageHook = SetWindowsHookEx(WH_CALLWNDPROC, MsgProc, NULL, GetCurrentThreadId());
-    /* if (languageHook == NULL) {
+     if (keyboardHook == NULL) {
          std::cerr << "Не удалось установить хук!" << std::endl;
          return 1;
-     }*/
+     }
 
 
 
@@ -357,7 +406,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         DispatchMessage(&msg);
     }
     UnhookWindowsHookEx(keyboardHook);
-    //    UnhookWindowsHookEx(languageHook);
     return 0;
 }
 
@@ -365,7 +413,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
+    case WM_GETMINMAXINFO: {
+        // Указатель на структуру MINMAXINFO
+        MINMAXINFO* minMaxInfo = (MINMAXINFO*)lParam;
+        400, 160,
+        //  Устанавливаем минимальные размеры
+        minMaxInfo->ptMinTrackSize.x = 400;  // Минимальная ширина
+        minMaxInfo->ptMinTrackSize.y = 160; // Минимальная высота
 
+        return 0; // Сообщение обработано
+    }
 
     case WM_ACTIVATE:
         OutputDebugString(L"WM_ACTIVATE\n");
@@ -381,22 +438,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         GenerateKeys(width, height);
         InvalidateRect(hwnd, nullptr, TRUE); // Перерисовать окно
     } break;
-    case WM_KILLFOCUS: {
-        OutputDebugString(L"WM_KILLFOCUS\n");
-        OutputDebugString(L"Окно keyboard потеряло фокус.\n");
-        DebugActiveWindow();
-    }
-                     break;
-    case WM_SETFOCUS: {
-        OutputDebugString(L"WM_SETFOCUS\n");
-        OutputDebugString(L"Окно keyboard получило фокус.\n");
-        DebugActiveWindow();
-    }
-                    break;
-
-
-
-
     case WM_LBUTTONDOWN: {
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
@@ -404,7 +445,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         int keyPosSize = keyPos.size();
         for (int i = 0; i < keyPosSize; ++i) {
             if (PtInRect(&keyPos[i].rect, { x, y })) {
-                UINT vkCode = macKeyboardLayout[i];
+                 UINT vkCode = macKeyboardLayout[i];
                 if (modifierState.find(vkCode) != modifierState.end()) {
                     // Переключаем состояние модификаторной клавиши
                     modifierState[vkCode] = !modifierState[vkCode];
@@ -487,48 +528,48 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         break;
 
-        //case WM_PAINT: {
-        //    PAINTSTRUCT ps;
-        //    HDC hdc = BeginPaint(hwnd, &ps);
-        //    // Очистка окна: закрашиваем фон
-        //    RECT rect;
-        //    GetClientRect(hwnd, &rect);
-        //  //  HBRUSH hBrush = CreateSolidBrush(isKeyPressed ? RGB(200, 200, 200) : RGB(255, 255, 255)); // Серый или белый
-        //    HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Белый фонa
-        //    FillRect(hdc, &rect, hBrush);
-        //    DeleteObject(hBrush);
-        //    // Отрисовка клавиатуры
-        //    DrawKeyboard(hdc);
-        //    EndPaint(hwnd, &ps);
-        //    return 0; 
-        //} break;
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            // Очистка окна: закрашиваем фон
+            RECT rect;
+            GetClientRect(hwnd, &rect);
+          //  HBRUSH hBrush = CreateSolidBrush(isKeyPressed ? RGB(200, 200, 200) : RGB(255, 255, 255)); // Серый или белый
+            HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Белый фонa
+            FillRect(hdc, &rect, hBrush);
+            DeleteObject(hBrush);
+            // Отрисовка клавиатуры
+            DrawKeyboard(hdc);
+            EndPaint(hwnd, &ps);
+            return 0; 
+        } break;
+        
 
-
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hwnd, &ps);
-        // Получаем размеры окна
-        RECT rect;
-        GetClientRect(hwnd, &rect);
-        // Создаем совместимый контекст устройства памяти
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        HBITMAP hBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
-        HGDIOBJ hOldBitmap = SelectObject(hdcMem, hBitmap);
-        // Заливаем фон в буфере памяти
-        HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Белый фон
-        FillRect(hdcMem, &rect, hBrush);
-        DeleteObject(hBrush);
-        // Отрисовка клавиатуры в буфере памяти
-        DrawKeyboard(hdcMem);
-        // Копируем содержимое из памяти на экран
-        BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
-        // Освобождаем ресурсы 
-        SelectObject(hdcMem, hOldBitmap);
-        DeleteObject(hBitmap);
-        DeleteDC(hdcMem);
-        EndPaint(hwnd, &ps);
-        return 0;
-    } break;
+    //case WM_PAINT: {
+    //    PAINTSTRUCT ps;
+    //    HDC hdc = BeginPaint(hwnd, &ps);
+    //    // Получаем размеры окна
+    //    RECT rect;
+    //    GetClientRect(hwnd, &rect);
+    //    // Создаем совместимый контекст устройства памяти
+    //    HDC hdcMem = CreateCompatibleDC(hdc);
+    //    HBITMAP hBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+    //    HGDIOBJ hOldBitmap = SelectObject(hdcMem, hBitmap);
+    //    // Заливаем фон в буфере памяти
+    //    HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255)); // Белый фон
+    //    FillRect(hdcMem, &rect, hBrush);
+    //    DeleteObject(hBrush);
+    //    // Отрисовка клавиатуры в буфере памяти
+    //    DrawKeyboard(hdcMem);
+    //    // Копируем содержимое из памяти на экран
+    //    BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
+    //    // Освобождаем ресурсы 
+    //    SelectObject(hdcMem, hOldBitmap);
+    //    DeleteObject(hBitmap);
+    //    DeleteDC(hdcMem);
+    //    EndPaint(hwnd, &ps);
+    //    return 0;
+    //} break;
     }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
